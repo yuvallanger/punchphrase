@@ -6,29 +6,17 @@
 import Control.Monad.IO.Class
 import UI.NCurses
 import Data.IORef
+import qualified Graphics.Vty.Widgets.TextZipper as TZ
+import Data.Text
 
-data Pos = Pos
-    { colPos :: !Int
-    , rowPos :: !Int
-    }
- 
-
-data MyState = 
-
-defaultMyState :: MyState
-defaultMyState =
-    MyState
-        { passwords = [""]
-        , cursorPos =
-            Pos
-                { colPos = 0
-                , rowPos = 0
-                }
-        }
+blankState :: MyState
+blankState = TZ.textZipper [""]
+    
+type MyState = TZ.TextZipper Text
 
 main :: IO ()
 main = do
-    stateRef <- newIORef defaultMyState
+    stateRef <- newIORef blankState
     password <- runCurses $ do
         setEcho False
         w <- defaultWindow
@@ -40,9 +28,9 @@ main = do
             moveCursor 0 0
         render
         loop w stateRef
-    putStrLn $ mconcat password
+    print password
 
-loop :: Window -> IORef MyState -> Curses [String]
+loop :: Window -> IORef MyState -> Curses [Text]
 loop w stateRef = do
     mev <- getEvent w (Just 16)
     case mev of
@@ -62,12 +50,14 @@ loop w stateRef = do
             liftIO $ addChar stateRef char
             render
             loop'
-        | isKeySpace        ev = loop' 
-        | not $ isExitEvent ev = do
-            updateWindow w . drawString . show $ ev
-            render
+        | isKeySpace        ev = do
+            updateKeySpace w stateRef
             loop'
-        | otherwise            = liftIO $ return . passphrase =<< readIORef stateRef
+        | not $ isExitEvent ev = do
+            -- updateWindow w . drawString . show $ ev
+            -- render
+            loop'
+        | otherwise            = liftIO $ return . TZ.getText =<< readIORef stateRef
     isLetter ev     = elem ev $ fmap EventCharacter ['a'..'z'] ++ fmap EventCharacter ['A'..'Z']
     isKeyLeftArrow  = (== EventSpecialKey KeyLeftArrow)
     isKeyRightArrow = (== EventSpecialKey KeyRightArrow)
@@ -75,6 +65,13 @@ loop w stateRef = do
     isKeyDownArrow  = (== EventSpecialKey KeyDownArrow)
     isKeyBackspace  = (== EventSpecialKey KeyBackspace)
     isKeySpace      = (== EventCharacter ' ')
+
+updateKeySpace :: Window -> IORef MyState -> Curses ()
+updateKeySpace _ {- window -} stateRef = do
+    oldState <- liftIO $ readIORef stateRef
+    -- let oldCursorPos = TZ.cursorPosition oldState
+    -- let oldLineLengths = TZ.lineLengths oldState
+    liftIO . writeIORef stateRef . TZ.breakLine $ oldState
 
 isExitEvent :: Event -> Bool
 isExitEvent ev = EventCharacter '\n' == ev
@@ -91,7 +88,7 @@ stepRight :: Window -> Curses ()
 stepRight  w = moveRelative w 1   0 
 
 stepUp :: Window -> Curses ()
-stepUp  w = moveRelative w 0   (-1)
+stepUp w = moveRelative w 0   (-1)
 
 stepDown :: Window -> Curses ()
 stepDown w = moveRelative w 0   1 
@@ -102,12 +99,6 @@ drawChar w char = updateWindow w $ drawString [char]
 addChar :: IORef MyState -> Char -> IO ()
 addChar stateRef char = do
     state <- readIORef stateRef
-    let pos       = cursorPos state 
-    let xss = passwords state 
-    let xss' = (take ((rowPos pos) - 1) xss
-             ++ (take (colPos pos)
-                      (xss !! rowPos pos)
-                ++ [char] ++
-                (drop (colPos pos + 1) xss)
+    let newState = TZ.insertChar char state
     writeIORef stateRef newState
 

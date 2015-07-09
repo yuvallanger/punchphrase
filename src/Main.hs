@@ -3,16 +3,44 @@
 
 --import Graphics.Vty.Widgets.All
 --import Data.Text as T
-import Control.Monad.IO.Class
+import Control.Monad.IO.Class (liftIO)
 import UI.NCurses
+    ( Curses
+    , runCurses
+    , setEcho
+    , defaultWindow
+    , render
+    , getEvent
+    , Window
+    , updateWindow
+    , drawString
+    , getCursor
+    , moveCursor
+    , Event
+        ( EventCharacter
+        , EventSpecialKey
+        )
+    , Key
+        ( KeyDownArrow
+        , KeyRightArrow
+        , KeyLeftArrow
+        , KeyUpArrow
+        , KeyBackspace
+        )
+    )
 import Data.IORef
+    ( IORef
+    , newIORef
+    , readIORef
+    , writeIORef
+    )
 import qualified Graphics.Vty.Widgets.TextZipper as TZ
-import Data.Text
+import Data.Text (Text, unpack)
 
-blankState :: MyState
+
+blankState :: TZ.TextZipper Text
 blankState = TZ.textZipper [""]
-    
-type MyState = TZ.TextZipper Text
+
 
 main :: IO ()
 main = do
@@ -20,15 +48,14 @@ main = do
     password <- runCurses $ do
         setEcho False
         w <- defaultWindow
-        updateWindow w $ do
-            moveCursor 1 10
-            drawString "♥ Hello world! ♥"
-            moveCursor 0 0
-        render
         loop w stateRef
-    print password
+    putStrLn . Prelude.concat . fmap unpack $ password
 
-loop :: Window -> IORef MyState -> Curses [Text]
+
+loop
+    :: Window
+    -> IORef (TZ.TextZipper Text)
+    -> Curses [Text]
 loop w stateRef = do
     mev <- getEvent w (Just 16)
     case mev of
@@ -64,37 +91,69 @@ loop w stateRef = do
     isKeyBackspace  = (== EventSpecialKey KeyBackspace)
     isKeySpace      = (== EventCharacter ' ')
 
-updateKeySpace :: Window -> IORef MyState -> Curses ()
+
+updateKeySpace
+    :: Window
+    -> IORef (TZ.TextZipper Text)
+    -> Curses ()
 updateKeySpace _ {- window -} stateRef = do
     oldState <- liftIO $ readIORef stateRef
     -- let oldCursorPos = TZ.cursorPosition oldState
     -- let oldLineLengths = TZ.lineLengths oldState
     liftIO . writeIORef stateRef . TZ.breakLine $ oldState
 
-isExitEvent :: Event -> Bool
+
+isExitEvent
+    :: Event
+    -> Bool
 isExitEvent ev = EventCharacter '\n' == ev
 
-moveRelative :: Window -> Integer -> Integer -> Curses ()
+
+moveRelative
+    :: Window
+    -> Integer
+    -> Integer
+    -> Curses ()
 moveRelative w x y = do
     (col, row) <- getCursor w
     updateWindow w $ moveCursor (col + y) (row + x)
 
-stepLeft :: Window -> Curses ()
+
+stepLeft
+    :: Window
+    -> Curses ()
 stepLeft  w = moveRelative w (-1)   0 
 
-stepRight :: Window -> Curses ()
+
+stepRight
+    :: Window
+    -> Curses ()
 stepRight  w = moveRelative w 1   0 
 
-stepUp :: Window -> Curses ()
+
+stepUp
+    :: Window
+    -> Curses ()
 stepUp w = moveRelative w 0   (-1)
 
-stepDown :: Window -> Curses ()
+
+stepDown
+    :: Window
+    -> Curses ()
 stepDown w = moveRelative w 0   1 
 
-drawChar :: Window -> Char -> Curses ()
+
+drawChar
+    :: Window
+    -> Char
+    -> Curses ()
 drawChar w char = updateWindow w $ drawString [char]
 
-addChar :: IORef MyState -> Char -> IO ()
+
+addChar
+    :: IORef (TZ.TextZipper Text)
+    -> Char
+    -> IO ()
 addChar stateRef char = do
     state <- readIORef stateRef
     let newState = TZ.insertChar char state

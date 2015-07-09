@@ -22,9 +22,7 @@ main = do
         w <- defaultWindow
         updateWindow w $ do
             moveCursor 1 10
-            drawString "Hello world!"
-            moveCursor 3 10
-            drawString "(press q to quit)"
+            drawString "♥ Hello world! ♥"
             moveCursor 0 0
         render
         loop w stateRef
